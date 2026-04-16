@@ -51,7 +51,7 @@ Most multi-stream tools (ViewGrid, Streamyyy, MultiTwitch) are **stateless** —
 **Requirements**: [Node.js](https://nodejs.org/) v18+
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/streamnest.git
+git clone https://github.com/kevinhou456/streamnest.git
 cd streamnest/server
 npm install
 npm start
@@ -65,7 +65,7 @@ Open **http://localhost:3000** in your browser.
 2. Paste a YouTube live stream URL:
    - `https://www.youtube.com/watch?v=VIDEO_ID`
    - `https://youtu.be/VIDEO_ID`
-   - `https://www.youtube.com/live/VIDEO_ID`
+   - `https://www.youtube.com/@id/streams`
 3. Fill in a name, optional metadata, and tags
 4. Click **Add**
 
