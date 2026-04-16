@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bird Nest Live</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部工具栏 -->
+    <header class="toolbar" :class="{ 'arrange-bar': arrangeMode }">
+      <template v-if="!arrangeMode">
+        <div class="toolbar-left">
+          <span class="logo">🐦 {{ t('appName') }}</span>
+        </div>
+        <div class="toolbar-center">
+          <div class="filter-btns">
+            <button :class="['btn', filter === 'all' && !activeTag && !activeSpecies ? 'active' : '']" @click="setFilter('all')">{{ t('filterAll') }}</button>
+            <button :class="['btn', filter === 'favorite' ? 'active' : '']" @click="setFilter('favorite')">{{ t('filterFavorite') }}</button>
+            <button :class="['btn', filter === 'online' ? 'active' : '']" @click="setFilter('online')">{{ t('filterOnline') }}</button>
+          </div>
+          <div class="tag-filters" v-if="speciesList.length > 0">
+            <button
+              v-for="s in speciesList" :key="s"
+              class="btn-tag btn-species"
+              :class="{ active: activeSpecies === s }"
+              @click="setSpeciesFilter(s)"
+            >🐦 {{ s }}</button>
+          </div>
+          <div class="tag-filters" v-if="tags.length > 0">
+            <button
+              v-for="tag in tags" :key="tag.id"
+              class="btn-tag"
+              :class="{ active: activeTag === tag.id }"
+              :style="activeTag === tag.id ? { background: tag.color, borderColor: tag.color } : { borderColor: tag.color, color: tag.color }"
+              @click="setTagFilter(tag.id)"
+            >{{ tag.name }}</button>
+          </div>
+          <button class="btn-tag-manage" @click="openTagManager()">{{ t('btnManageTags') }}</button>
+        </div>
+        <div class="toolbar-right">
+          <div class="lang-toggle">
+            <button :class="['btn-lang', lang === 'zh' ? 'active' : '']" @click="setLang('zh')">中</button>
+            <span class="lang-sep">/</span>
+            <button :class="['btn-lang', lang === 'en' ? 'active' : '']" @click="setLang('en')">EN</button>
+          </div>
+          <div class="grid-btns">
+            <button :class="['btn-grid', gridSize === 4 ? 'active' : '']" @click="setGrid(4)" title="4">⊞</button>
+            <button :class="['btn-grid', gridSize === 9 ? 'active' : '']" @click="setGrid(9)" title="9">⊟</button>
+            <button :class="['btn-grid', gridSize === 16 ? 'active' : '']" @click="setGrid(16)" title="16">⊠</button>
+          </div>
+          <button class="btn btn-arrange" @click="enterArrangeMode()">{{ t('btnArrange') }}</button>
+          <button class="btn btn-add" @click="openAddModal()">{{ t('btnAddNest') }}</button>
+        </div>
+      </template>
+
+      <template v-else>
+        <span class="arrange-hint">{{ t('arrangeHint') }}</span>
+        <button class="btn btn-finish" @click="finishArrangeMode()">{{ t('btnDone') }}</button>
+      </template>
+    </header>
+
+    <!-- 主网格区域 -->
+    <main class="grid-container" :class="['grid-' + gridCols, { 'arrange-mode': arrangeMode }]">
+      <div
+        v-for="(item, index) in arrangeMode ? nests.slice((currentPage-1)*gridSize, currentPage*gridSize) : pagedSlots"
+        :key="item ? item.id : 'empty-' + index"
+        class="grid-cell"
+        @click="handleCellClick(item)"
+        @contextmenu.prevent="handleRightClick($event, item)"
+      >
+        <template v-if="item">
+          <div class="nest-card" :class="{ offline: !item.is_online }">
+            <template v-if="arrangeMode">
+              <div class="nest-thumb">
+                <img :src="'https://img.youtube.com/vi/' + item.video_id + '/mqdefault.jpg'" :alt="item.name" class="thumb-img" />
+                <div class="drag-overlay">⠿</div>
+              </div>
+            </template>
+            <template v-else>
+              <div v-if="item.is_online" class="nest-thumb">
+                <iframe
+                  :src="'https://www.youtube.com/embed/' + item.video_id + '?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0'"
+                  frameborder="0" allow="autoplay; encrypted-media" class="grid-iframe"
+                ></iframe>
+                <div class="live-badge">{{ t('live') }}</div>
+              </div>
+              <div v-else class="nest-offline-placeholder">
+                <div class="offline-icon">🪺</div>
+                <div class="offline-label">{{ t('offline') }}</div>
+              </div>
+            </template>
+            <div class="nest-info">
+              <span class="nest-name">{{ item.name }}</span>
+              <span v-if="item.is_favorite" class="star">★</span>
+              <div class="nest-tags" v-if="item.tags && item.tags.length">
+                <span v-for="tag in item.tags" :key="tag.id" class="nest-tag-chip"
+                  :style="{ background: tag.color + '33', color: tag.color, borderColor: tag.color + '66' }">{{ tag.name }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="empty-cell" @click.stop="openAddModal()" @dragover.prevent @drop.prevent="handleDrop($event)">
+            <span class="add-icon">+</span>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- 翻页栏 -->
+    <nav class="pagination" v-if="totalPages > 1">
+      <button class="page-btn page-arrow" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">◀</button>
+      <template v-for="p in pageNumbers" :key="p">
+        <span v-if="p === '...'" class="page-ellipsis">…</span>
+        <button v-else class="page-btn" :class="{ active: p === currentPage }" @click="goToPage(p)">{{ p }}</button>
+      </template>
+      <button class="page-btn page-arrow" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">▶</button>
+    </nav>
+
+    <!-- 右键菜单 -->
+    <div v-if="contextMenu.visible" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+      <div class="context-item" @click="toggleFavorite(contextMenu.nest)">
+        {{ contextMenu.nest && contextMenu.nest.is_favorite ? t('ctxUnfavorite') : t('ctxFavorite') }}
+      </div>
+      <div class="context-item" @click="toggleOnline(contextMenu.nest)">
+        {{ contextMenu.nest && contextMenu.nest.is_online ? t('ctxMarkOffline') : t('ctxMarkOnline') }}
+      </div>
+      <div class="context-item" @click="openEditModal(contextMenu.nest)">{{ t('ctxEdit') }}</div>
+      <div class="context-item danger" @click="deleteNest(contextMenu.nest)">{{ t('ctxDelete') }}</div>
+    </div>
+
+    <!-- 放大模式 -->
+    <div v-if="expandedNest" class="expand-overlay" @click.self="closeExpand()">
+      <div class="expand-panel">
+        <div class="expand-header">
+          <span class="expand-title">{{ expandedNest.name }}</span>
+          <span v-if="expandedNest.species" class="expand-species">{{ expandedNest.species }}</span>
+          <span v-if="expandedNest.location" class="expand-location">📍 {{ expandedNest.location }}</span>
+          <div class="expand-tags" v-if="expandedNest.tags && expandedNest.tags.length">
+            <span v-for="tag in expandedNest.tags" :key="tag.id" class="nest-tag-chip"
+              :style="{ background: tag.color + '33', color: tag.color, borderColor: tag.color + '66' }">{{ tag.name }}</span>
+          </div>
+          <button class="btn-close" @click="closeExpand()">✕</button>
+        </div>
+        <div class="expand-video">
+          <iframe
+            v-if="expandedNest.is_online"
+            :src="'https://www.youtube.com/embed/' + expandedNest.video_id + '?autoplay=1&mute=0'"
+            frameborder="0" allow="autoplay; encrypted-media; picture-in-picture"
+            allowfullscreen class="expand-iframe"
+          ></iframe>
+          <div v-else class="expand-offline">
+            <div class="offline-icon large">🪺</div>
+            <p>{{ t('nestOffline') }}</p>
+          </div>
+        </div>
+        <div v-if="expandedNest.notes" class="expand-notes">
+          <strong>{{ t('notesLabel') }}</strong>{{ expandedNest.notes }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加/编辑弹窗 -->
+    <div v-if="modal.visible" class="modal-overlay" @click.self="closeModal()">
+      <div class="modal">
+        <h2>{{ modal.isEdit ? t('modalEditTitle') : t('modalAddTitle') }}</h2>
+        <!-- 选流界面：有多个直播时只显示此部分 -->
+        <template v-if="modal.streams && modal.streams.length > 0">
+          <p class="stream-picker-hint">{{ t('multipleStreams') }}</p>
+          <div class="stream-picker">
+            <div v-for="s in modal.streams" :key="s.videoId" class="stream-option" @click="selectStream(s)">
+              <span class="live-dot">●</span>
+              <span class="stream-title">{{ s.title || s.videoId }}</span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 正常表单 -->
+        <template v-else>
+          <div class="form-group">
+            <label>{{ t('labelUrl') }}</label>
+            <input v-model="modal.form.youtube_url" type="text" :placeholder="t('placeholderUrl')" :disabled="modal.isEdit" />
+          </div>
+          <div class="form-group">
+            <label>{{ t('labelName') }}</label>
+            <input v-model="modal.form.name" type="text" :placeholder="t('placeholderName')" />
+          </div>
+          <div class="form-group">
+            <label>{{ t('labelSpecies') }}</label>
+            <input v-model="modal.form.species" type="text" :placeholder="t('placeholderSpecies')" list="species-list" autocomplete="off" />
+            <datalist id="species-list">
+              <option v-for="s in speciesList" :key="s" :value="s" />
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label>{{ t('labelLocation') }}</label>
+            <input v-model="modal.form.location" type="text" :placeholder="t('placeholderLocation')" />
+          </div>
+          <div class="form-group">
+            <label>{{ t('labelTags') }}</label>
+            <div class="tag-selector">
+              <div v-for="tag in tags" :key="tag.id" class="tag-option"
+                :style="modal.form.tag_ids.includes(tag.id)
+                  ? { background: tag.color, borderColor: tag.color, color: '#fff' }
+                  : { borderColor: tag.color, color: tag.color }"
+                @click="toggleTagSelection(tag.id)">{{ tag.name }}</div>
+              <div v-if="tags.length === 0" class="no-tags-hint">{{ t('noTagsHint') }}</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>{{ t('labelNotes') }}</label>
+            <textarea v-model="modal.form.notes" :placeholder="t('placeholderNotes')" rows="3"></textarea>
+          </div>
+        </template>
+
+        <div v-if="modal.error" class="modal-error">{{ modal.error }}</div>
+        <div class="modal-actions">
+          <button class="btn" @click="closeModal()">{{ t('btnCancel') }}</button>
+          <button v-if="!modal.streams || modal.streams.length === 0" class="btn btn-primary" @click="saveModal()">{{ modal.isEdit ? t('btnSave') : t('btnAdd') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 标签管理弹窗 -->
+    <div v-if="tagManager.visible" class="modal-overlay" @click.self="closeTagManager()">
+      <div class="modal">
+        <h2>{{ t('tagManagerTitle') }}</h2>
+        <div class="tag-manager-list">
+          <div v-for="tag in tags" :key="tag.id" class="tag-manager-item">
+            <span class="tag-color-dot" :style="{ background: tag.color }"></span>
+            <span class="tag-manager-name">{{ tag.name }}</span>
+            <span class="tag-manager-count">{{ t('tagNestCount', { n: tag.nest_count }) }}</span>
+            <button class="btn-tag-delete" @click="deleteTag(tag)">✕</button>
+          </div>
+          <div v-if="tags.length === 0" class="no-tags-hint">{{ t('noTags') }}</div>
+        </div>
+        <div class="tag-create-row">
+          <input v-model="tagManager.newName" type="text" :placeholder="t('placeholderTagName')" class="tag-name-input" @keyup.enter="createTag()" />
+          <input v-model="tagManager.newColor" type="color" class="tag-color-input" />
+          <button class="btn btn-primary" @click="createTag()">{{ t('btnAdd') }}</button>
+        </div>
+        <div v-if="tagManager.error" class="modal-error">{{ tagManager.error }}</div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" @click="closeTagManager()">{{ t('btnDone') }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

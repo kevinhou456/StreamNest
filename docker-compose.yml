@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  birdnest:
+    build: .
+    container_name: birdnest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./server:/app/server
+      - ./public:/app/public
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
