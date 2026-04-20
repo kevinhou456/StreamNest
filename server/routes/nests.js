@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { extractVideoId } = require('../utils');
-const { isChannelLiveUrl, resolveChannelVideoId, fetchVideoInfo } = require('../resolver');
+const { isChannelLiveUrl, resolveChannelVideoId, fetchVideoInfo, fetchChannelLiveStreams } = require('../resolver');
 
 // GET all nests (with tags, applying saved view order)
 router.get('/', (req, res) => {
@@ -85,7 +85,17 @@ router.post('/', async (req, res) => {
 
   // Support channel live URLs (e.g. https://www.youtube.com/@channelname/live)
   if (!video_id && isChannelLiveUrl(youtube_url)) {
-    video_id = await resolveChannelVideoId(youtube_url);
+    if (/\/streams$/.test(youtube_url)) {
+      const handleMatch = youtube_url.match(/youtube\.com\/((?:@|channel\/|c\/)[^/?]+)/);
+      const handle = handleMatch ? handleMatch[1] : null;
+      const streams = handle ? await fetchChannelLiveStreams(handle) : [];
+      if (streams.length > 1) {
+        return res.json({ streams });
+      } else if (streams.length === 1) {
+        video_id = streams[0].videoId;
+      }
+    }
+    if (!video_id) video_id = await resolveChannelVideoId(youtube_url);
   }
 
   if (!video_id) {

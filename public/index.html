@@ -64,7 +64,7 @@
     <!-- 主网格区域 -->
     <main class="grid-container" :class="['grid-' + gridCols, { 'arrange-mode': arrangeMode }]">
       <div
-        v-for="(item, index) in arrangeMode ? nests.slice((currentPage-1)*gridSize, currentPage*gridSize) : pagedSlots"
+        v-for="(item, index) in arrangeMode ? nests : pagedSlots"
         :key="item ? item.id : 'empty-' + index"
         class="grid-cell"
         @click="handleCellClick(item)"

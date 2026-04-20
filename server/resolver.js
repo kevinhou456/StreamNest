@@ -166,14 +166,8 @@ function parseLiveStreams(html) {
     if (!titleTextMatch) continue;
 
     const rawTitle = titleTextMatch[1];
-    // Title must have at least 2 non-consecutive spaces (rules out video IDs and short UI labels)
-    const spacePositions = [];
-    for (let i = 0; i < rawTitle.length; i++) {
-      if (rawTitle[i] === ' ') spacePositions.push(i);
-    }
-    const hasNonConsecutiveSpaces = spacePositions.length >= 2 &&
-      spacePositions.some((p, i) => i > 0 && p - spacePositions[i - 1] > 1);
-    if (!hasNonConsecutiveSpaces) continue;
+    // Rule out video IDs and very short UI labels
+    if (rawTitle.length < 4 || /^[a-zA-Z0-9_-]{11}$/.test(rawTitle)) continue;
 
     // Find the last videoId BEFORE the title key position
     const beforeTitle = before.slice(0, titleKeyIdx);

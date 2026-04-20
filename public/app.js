@@ -281,17 +281,13 @@ createApp({
       const el = document.querySelector('.grid-container');
       if (!el || !window.Sortable) return;
       destroySortable();
-      const pageStart = (currentPage.value - 1) * gridSize.value;
       sortableInstance = Sortable.create(el, {
         animation: 150,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
-        filter: '.empty-cell',
         onEnd(evt) {
-          const from = pageStart + evt.oldIndex;
-          const to = pageStart + evt.newIndex;
-          const moved = nests.value.splice(from, 1)[0];
-          if (moved) nests.value.splice(to, 0, moved);
+          const moved = nests.value.splice(evt.oldIndex, 1)[0];
+          if (moved) nests.value.splice(evt.newIndex, 0, moved);
         }
       });
     }
