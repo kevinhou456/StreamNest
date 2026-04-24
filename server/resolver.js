@@ -191,41 +191,50 @@ function parseLiveStreams(html) {
  * Fetch the current live streams from a channel's /streams page.
  */
 function fetchChannelLiveStreams(channelHandle) {
-  return new Promise((resolve) => {
-    if (!channelHandle) { resolve([]); return; }
-    const url = `https://www.youtube.com/${channelHandle}/streams`;
-    const options = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      timeout: 15000,
-    };
+  if (!channelHandle) return Promise.resolve([]);
 
-    const req = https.get(url, options, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        resolve([]);
-        return;
-      }
+  const options = {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    timeout: 15000,
+  };
 
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk;
-        if (data.length > 1200000) res.destroy();
+  function fetchUrl(url, redirectCount) {
+    return new Promise((resolve) => {
+      if (redirectCount > 3) { resolve([]); return; }
+
+      const req = https.get(url, options, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          const next = res.headers.location.startsWith('http')
+            ? res.headers.location
+            : `https://www.youtube.com${res.headers.location}`;
+          fetchUrl(next, redirectCount + 1).then(resolve);
+          return;
+        }
+
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+          if (data.length > 1200000) res.destroy();
+        });
+        const done = () => {
+          const checks = ['BADGE_STYLE_TYPE_LIVE_NOW','"isLive":true','"isLiveNow":true','LIVE_NOW','"style":"LIVE"','thumbnailOverlayLiveChatRenderer','liveBroadcastDetails'].map(k => `${k}=${data.includes(k)}`).join(' ');
+          console.log(`[fetchChannelLiveStreams] ${channelHandle} pageSize=${data.length} ${checks}`);
+          resolve(parseLiveStreams(data));
+        };
+        res.on('end', done);
+        res.on('close', done);
       });
-      const done = () => {
-        const checks = ['BADGE_STYLE_TYPE_LIVE_NOW','"isLive":true','"isLiveNow":true','LIVE_NOW','"style":"LIVE"','thumbnailOverlayLiveChatRenderer','liveBroadcastDetails'].map(k => `${k}=${data.includes(k)}`).join(' ');
-        console.log(`[fetchChannelLiveStreams] ${channelHandle} pageSize=${data.length} ${checks}`);
-        resolve(parseLiveStreams(data));
-      };
-      res.on('end', done);
-      res.on('close', done);
-    });
 
-    req.setTimeout(15000, () => { req.destroy(); resolve([]); });
-    req.on('error', () => resolve([]));
-  });
+      req.setTimeout(15000, () => { req.destroy(); resolve([]); });
+      req.on('error', () => resolve([]));
+    });
+  }
+
+  return fetchUrl(`https://www.youtube.com/${channelHandle}/streams`, 0);
 }
 
 /**
